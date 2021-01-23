@@ -28,31 +28,31 @@ class UNet(nn.Module):
             f'final-act': nn.Sigmoid()
         }))
 
-    def forward(self, x):
-        print('input', x.shape)
+    def forward(self, x, verbose=False):
+        if verbose: print('input', x.shape)
         enc1 = self.encoder1(x)
-        print('enc1', enc1.shape)
+        if verbose: print('enc1', enc1.shape)
         enc2 = self.encoder2(enc1)
-        print('enc2', enc2.shape)
+        if verbose: print('enc2', enc2.shape)
         enc3 = self.encoder3(enc2)
-        print('enc3', enc3.shape)
+        if verbose: print('enc3', enc3.shape)
         enc4 = self.encoder4(enc3)
-        print('enc4', enc4.shape)
+        if verbose: print('enc4', enc4.shape)
 
         x = self.bottleneck(enc4)
-        print('botleneck', x.shape)
+        if verbose: print('botleneck', x.shape)
 
         x = self.decoder1(torch.cat([x, enc4], dim=1))
-        print('dec1', x.shape)
+        if verbose: print('dec1', x.shape)
         x = self.decoder2(torch.cat([x, enc3], dim=1))
-        print('dec2', x.shape)
+        if verbose: print('dec2', x.shape)
         x = self.decoder3(torch.cat([x, enc2], dim=1))
-        print('dec3', x.shape)
+        if verbose: print('dec3', x.shape)
         x = self.decoder4(torch.cat([x, enc1], dim=1))
-        print('dec4', x.shape)
+        if verbose: print('dec4', x.shape)
 
         x = self.head(x)
-        print('head', x.shape)
+        if verbose: print('head', x.shape)
         return x
 
     def block(self, in_channels, out_channels, name):
