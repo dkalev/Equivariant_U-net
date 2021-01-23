@@ -24,8 +24,9 @@ class RetinalDataset(Dataset):
         x_path = self.image_paths[idx]
         y_path = self.mask_paths[idx]
 
-        x = Image.open(x_path).convert('RGB')
-        y = Image.open(y_path).convert('RGB')
+        # CHECK if resizing is necessary and if larger/smaller size should be used
+        x = Image.open(x_path).resize((512,512)).convert('RGB')
+        y = Image.open(y_path).resize((512,512))
 
         x = self.transform(x)
         y = self.transform(y)
