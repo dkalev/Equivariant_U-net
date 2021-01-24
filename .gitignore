@@ -1,4 +1,7 @@
 __pycache__/*
+.ipynb_checkpoints/*
+.vscode/*
+data/*
 training/*
 test/*
 datasets.zip
