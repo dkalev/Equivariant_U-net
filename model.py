@@ -102,33 +102,33 @@ class UNet(nn.Module):
 
 
 class C4UNet(nn.Module):
-    
+
     def __init__(self, gspace, in_channels, out_channels, features=64):
         super().__init__()
         self.gspace = gspace
         self.feat_types = self.get_feature_types(in_channels, features)
-        
+
         self.encoder1 = self.get_encoder('encoder1')
         self.encoder2 = self.get_encoder('encoder2')
         self.encoder3 = self.get_encoder('encoder3')
         self.encoder4 = self.get_encoder('encoder4')
 
         self.bottleneck = self.get_bottleneck()
-        
+
         self.decoder1 = self.get_decoder('decoder1')
         self.decoder2 = self.get_decoder('decoder2')
         self.decoder3 = self.get_decoder('decoder3')
         self.decoder4 = self.get_decoder('decoder4')
-        
+
         self.gpool = GroupPooling(self.feat_types['decoder4'][1])
-        
+
         out = self.gpool.out_type.size
 
         self.head = nn.Sequential(OrderedDict({
             f'head-conv': nn.Conv2d(out, out_channels, kernel_size=3, padding=1, bias=False),
             f'final-act': nn.Sigmoid()
         }))
-        
+
     def get_feature_types(self, in_channels, n_features):
         n_features_down = [n_features * 2**i for i in range(0,4)]
         # in_channels is multiplied by 2 because encoder outputs are concatenated as well (see forward method)
@@ -136,32 +136,32 @@ class C4UNet(nn.Module):
 
         features_down = [( 'encoder1',
                           (
-                            FieldType(self.gspace, in_channels*[r2_act.trivial_repr]), 
-                            FieldType(self.gspace, n_features*[r2_act.regular_repr]) 
+                            FieldType(self.gspace, in_channels*[self.gspace.trivial_repr]),
+                            FieldType(self.gspace, n_features*[self.gspace.regular_repr])
                           )
         )] + [( f'encoder{i}',
                (
-                 FieldType(self.gspace, n_in*[r2_act.regular_repr]),
-                 FieldType(self.gspace, n_out*[r2_act.regular_repr])
+                 FieldType(self.gspace, n_in*[self.gspace.regular_repr]),
+                 FieldType(self.gspace, n_out*[self.gspace.regular_repr])
                )
         ) for i, (n_in, n_out) in enumerate(zip(n_features_down, n_features_down[1:]), start=2)]
 
         feats_bottleneck = [( 'bottleneck',
                (
-                 FieldType(self.gspace, n_features_down[-1]*[r2_act.regular_repr]),
-                 FieldType(self.gspace, n_features_down[-1]*[r2_act.regular_repr])
+                 FieldType(self.gspace, n_features_down[-1]*[self.gspace.regular_repr]),
+                 FieldType(self.gspace, n_features_down[-1]*[self.gspace.regular_repr])
                )
         )]
 
         features_up = [( f'decoder{i}',
                         (
-                         FieldType(self.gspace, n_in*[r2_act.regular_repr]),
-                         FieldType(self.gspace, n_out*[r2_act.regular_repr])
+                         FieldType(self.gspace, n_in*[self.gspace.regular_repr]),
+                         FieldType(self.gspace, n_out*[self.gspace.regular_repr])
                         )
         ) for i, (n_in, n_out) in enumerate(n_features_up, start=1)]
 
         return OrderedDict(features_down + feats_bottleneck + features_up)
-    
+
     def get_encoder(self, name):
         feat_type_in, feat_type_out = self.feat_types[name]
         return nn.Sequential(OrderedDict({
@@ -174,7 +174,7 @@ class C4UNet(nn.Module):
             f'{name}-relu2': ReLU(feat_type_out, inplace=True),
         }))
 
-    def get_decoder(self, name):    
+    def get_decoder(self, name):
         feat_type_in, feat_type_out = self.feat_types[name]
         return nn.Sequential(OrderedDict({
             f'{name}-deconv1': R2ConvTransposed(feat_type_in, feat_type_out, kernel_size=3, stride=2, output_padding=1, bias=False),
@@ -188,7 +188,7 @@ class C4UNet(nn.Module):
             f'{name}-relu2': ReLU(feat_type_out, inplace=True),
         }))
 
-    def get_bottleneck(self, name='bottleneck'):    
+    def get_bottleneck(self, name='bottleneck'):
         feat_type, _ = self.feat_types[name]
         return nn.Sequential(OrderedDict({
             f'{name}-conv1': R2Conv(feat_type, feat_type, kernel_size=3, padding=1, bias=False),
@@ -198,7 +198,7 @@ class C4UNet(nn.Module):
             f'{name}-bn2': InnerBatchNorm(feat_type),
             f'{name}-relu2': ReLU(feat_type, inplace=True),
         }))
-    
+
     def forward(self, x, verbose=False):
         x = GeometricTensor(x, self.feat_types['encoder1'][0])
         if verbose: print('input', x.shape)
@@ -210,10 +210,10 @@ class C4UNet(nn.Module):
         if verbose: print('enc3', enc3.shape)
         enc4 = self.encoder4(enc3)
         if verbose: print('enc4', enc4.shape)
-        
+
         x = self.bottleneck(enc4)
         if verbose: print('botleneck', x.shape)
-        
+
         x = GeometricTensor(torch.cat([x.tensor, enc4.tensor], dim=1), self.feat_types['decoder1'][0])
         x = self.decoder1(x)
         if verbose: print('dec1', x.shape)
@@ -226,7 +226,7 @@ class C4UNet(nn.Module):
         x = GeometricTensor(torch.cat([x.tensor, enc1.tensor], dim=1), self.feat_types['decoder4'][0])
         x = self.decoder4(x)
         if verbose: print('dec4', x.shape)
-        
+
         x = self.gpool(x)
         x = x.tensor
         if verbose: print('gpool', x.shape)

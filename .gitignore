@@ -5,3 +5,5 @@ data/*
 training/*
 test/*
 datasets.zip
+**/*.pth
+**/slurm*.out

@@ -1,8 +1,9 @@
 from dataset import RetinalDataset
 from loss import DiceLoss
-from model import UNet
+from model import C4UNet
 from torch.utils.data import DataLoader
 from torch.optim import AdamW
+from e2cnn import gspaces
 import torch
 import argparse
 
@@ -22,6 +23,7 @@ def train(config):
             loss = crit(preds, targs)
             loss.backward()
             optim.step()
+        print(f'Epoch: {epoch}, loss: {loss.detach().item()}')
 
 
 if __name__ == '__main__':
@@ -39,10 +41,13 @@ if __name__ == '__main__':
     ds = RetinalDataset(config.image_dir, config.label_dir)
     train_loader = DataLoader(ds, batch_size=config.bs, shuffle=True)
 
-    model = UNet(3,1).to(device)
+    r2_act = gspaces.Rot2dOnR2(4)
+    model = C4UNet(r2_act, 3,1, features=2).to(device)
 
     optim = AdamW(model.parameters(), lr=config.lr)
     crit = DiceLoss()
 
     train(config)
+
+    torch.save(model.state_dict(), 'C4Unet.pth')
 
