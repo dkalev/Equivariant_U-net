@@ -8,3 +8,4 @@ datasets.zip
 **/*.pth
 **/slurm*.out
 lightning_logs/*
+**/*.ckpt

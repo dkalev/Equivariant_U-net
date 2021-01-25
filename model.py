@@ -13,6 +13,7 @@ class BaseUNet(pl.LightningModule):
     def __init__(self):
         super().__init__()
         self.crit = DiceLoss()
+        self.lr = 1e-3
         
     def training_step(self, batch, batch_idx):
         x, targs = batch
@@ -22,7 +23,7 @@ class BaseUNet(pl.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
         return optimizer
 
 class UNet(BaseUNet):
