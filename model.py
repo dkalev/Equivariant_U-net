@@ -5,9 +5,27 @@ from e2cnn.nn import R2Conv, R2ConvTransposed, R2Upsampling, GroupPooling
 from e2cnn.nn import ReLU, FieldType, GeometricTensor, PointwiseMaxPool
 from e2cnn.nn import InnerBatchNorm
 from e2cnn import gspaces
+import pytorch_lightning as pl
+from loss import DiceLoss
 
+class BaseUNet(pl.LightningModule):
 
-class UNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.crit = DiceLoss()
+        
+    def training_step(self, batch, batch_idx):
+        x, targs = batch
+        preds = self(x)
+        loss = self.crit(preds, targs)
+        self.log('train_loss', loss)
+        return loss
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        return optimizer
+
+class UNet(BaseUNet):
 
     def __init__(self, in_channels, out_channels, features=64):
         super().__init__()
@@ -101,7 +119,7 @@ class UNet(nn.Module):
         }))
 
 
-class C4UNet(nn.Module):
+class C4UNet(BaseUNet):
 
     def __init__(self, gspace, in_channels, out_channels, features=64):
         super().__init__()
@@ -234,7 +252,6 @@ class C4UNet(nn.Module):
         x = self.head(x)
         if verbose: print('head', x.shape)
         return x
-
 
 
 if __name__ == '__main__':
