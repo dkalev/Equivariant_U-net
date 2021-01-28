@@ -8,4 +8,5 @@ datasets.zip
 **/*.pth
 **/slurm*.out
 lightning_logs/*
+test_tube/*
 **/*.ckpt
