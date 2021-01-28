@@ -1,5 +1,5 @@
 from dataset import RetinalDataset
-from model import C4UNet, UNet
+from models import C4UNet, UNet
 from torch.utils.data import DataLoader
 from e2cnn import gspaces
 import argparse
@@ -22,7 +22,7 @@ if __name__ == '__main__':
     train_loader = DataLoader(ds, batch_size=config.bs, shuffle=True, num_workers=12, pin_memory=True)
 
     r2_act = gspaces.Rot2dOnR2(8)
-    model = C4UNet(r2_act, 3,1, features=8)
+    model = C4UNet(r2_act, 3,1, n_features=8)
 
     checkpoint_cb = ModelCheckpoint(monitor='train_loss')
 
