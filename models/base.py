@@ -1,5 +1,7 @@
 import torch
+import torch.nn as nn
 from collections import OrderedDict
+from e2cnn.nn import GeometricTensor, GroupPooling, NormPool
 import pytorch_lightning as pl
 from loss import DiceLoss
 
@@ -94,3 +96,48 @@ class BaseUNet(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
         return optimizer
+
+class InvariantHead(nn.Module):
+    def __init__(self, in_channels, out_channels, pool_type='group'):
+        super().__init__()
+
+        if pool_type == 'group':
+            self.pool = GroupPooling(in_channels)
+        elif pool_type == 'norm':
+            self.pool = NormPool(in_channels)
+        else:
+            raise ValueError(f'Unsupported pooling: pool_type={pool_type}')
+
+        out = self.pool.out_type.size
+        self.final = nn.Sequential(OrderedDict({
+            f'head-conv': nn.Conv2d(out, out_channels, kernel_size=3, padding=1, bias=False),
+            f'final-act': nn.Sigmoid()
+        }))
+    
+    def forward(self, x, verbose=False):
+        x = self.pool(x)
+        x = x.tensor
+        if verbose: print('pool', x.shape)
+        x = self.final(x)
+        if verbose: print('head', x.shape)
+        return x
+
+class BaseEquivUNet(BaseUNet):
+
+    def __init__(self, gspace, in_channels, out_channels, *args, **kwargs):
+        self.gspace = gspace
+        super().__init__(in_channels, out_channels, *args, **kwargs)
+
+    def get_head(self, out_channels):
+        return InvariantHead(self.features['decoder4'][1], out_channels)
+
+    @staticmethod
+    def cat(gtensors, *args, **kwargs):
+        tensors = [ t.tensor for t in gtensors]
+        tensors_cat = torch.cat(tensors, *args, **kwargs)
+        feature_type = sum([t.type for t in gtensors[1:]], start=gtensors[0].type)
+        return GeometricTensor(tensors_cat, feature_type)
+
+    def forward(self, x, verbose=False):
+        x = GeometricTensor(x, self.features['encoder1'][0])
+        return super().forward(x)
