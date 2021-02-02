@@ -34,7 +34,7 @@ class BaseUNet(pl.LightningModule):
     def cat(tensors:Iterable[torch.Tensor], *args, **kwargs) -> torch.Tensor:
         return torch.cat(tensors, *args, **kwargs)
 
-    def get_head(self, out_channels:str):
+    def get_head(self, out_channels:int):
         raise NotImplementedError("Implement this method")
 
     def get_encoder(self, name:str):

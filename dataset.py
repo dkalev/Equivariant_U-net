@@ -1,9 +1,13 @@
+from torch.utils.data import Dataset, DataLoader
+from pytorch_lightning import LightningDataModule
 import os
+import zipfile
 from PIL import Image
 from pathlib import Path
 import torch
 from torch.utils.data import Dataset
 from torchvision import transforms
+from typing import Optional
 
 
 class RetinalDataset(Dataset):
@@ -33,7 +37,49 @@ class RetinalDataset(Dataset):
 
         return x, y
 
-if __name__ == '__main__':
-    ds = RetinalDataset('training/images/', 'training/1st_manual/')
-    print(len(ds))
-    print(ds[0][0].shape)
+
+class RetinalDataModule(LightningDataModule):
+
+    def __init__(self):
+        super().__init__()
+
+    def prepare_data(self, datapath='data/datasets.zip', output_dir='data'):
+        with zipfile.ZipFile(datapath, 'r') as zip_ref:
+            zip_ref.extractall(output_dir)
+
+        for fname in ['training', 'test']:
+            path = Path(output_dir, f'{fname}.zip')
+            with zipfile.ZipFile(path, 'r') as zip_ref:
+                zip_ref.extractall(output_dir)
+            os.remove(path)
+
+        train_dir = Path(output_dir, 'training')
+        valid_dir = Path(output_dir, 'valid')
+        os.makedirs(valid_dir)
+
+        for dirname in os.listdir(train_dir):
+            source_dir = Path(train_dir, dirname)
+            targ_dir = Path(valid_dir, dirname)
+            os.makedirs(targ_dir)
+            for fname in os.listdir(source_dir)[-4:]:
+                os.rename(Path(source_dir, fname), Path(targ_dir, fname))
+
+    def setup(self, stage: Optional[str] = None):
+        self.paths = {
+            'train': {
+                'images': 'data/training/images',
+                'labels': 'data/training/1st_manual',
+            },
+            'valid': {
+                'images': 'data/valid/images',
+                'labels': 'data/valid/1st_manual',
+            }
+        }
+
+    def train_dataloader(self):
+        train_split = RetinalDataset(self.paths['train']['images'], self.paths['train']['labels'])
+        return DataLoader(train_split)
+
+    def val_dataloader(self):
+        valid_split = RetinalDataset(self.paths['valid']['images'], self.paths['valid']['labels'])
+        return DataLoader(valid_split)
