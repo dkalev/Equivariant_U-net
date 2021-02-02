@@ -2,13 +2,15 @@ import torch
 import torch.nn as nn
 from collections import OrderedDict
 from e2cnn.nn import GeometricTensor, GroupPooling, NormPool
+import e2cnn
 import pytorch_lightning as pl
 from loss import DiceLoss
+from typing import Iterable, Union
 
 class BaseUNet(pl.LightningModule):
 
-    def __init__(self, in_channels, out_channels, n_features=64):
-        super().__init__()
+    def __init__(self, in_channels:int, out_channels:int, *args, n_features:int=64, **kwargs):
+        super().__init__(*args, **kwargs)
         self.crit = DiceLoss()
         self.lr = 1e-3
 
@@ -29,19 +31,19 @@ class BaseUNet(pl.LightningModule):
         self.head = self.get_head(out_channels)
 
     @staticmethod 
-    def cat(tensors, *args, **kwargs):
+    def cat(tensors:Iterable[torch.Tensor], *args, **kwargs) -> torch.Tensor:
         return torch.cat(tensors, *args, **kwargs)
 
-    def get_head(self, out_channels):
+    def get_head(self, out_channels:str):
         raise NotImplementedError("Implement this method")
 
-    def get_encoder(self, name):
+    def get_encoder(self, name:str):
         raise NotImplementedError("Implement this method")
 
-    def get_bottleneck(self, name='bottleneck'):
+    def get_bottleneck(self, name:str='bottleneck'):
         raise NotImplementedError("Implement this method")
 
-    def get_decoder(self, name):
+    def get_decoder(self, name:str):
         raise NotImplementedError("Implement this method")
 
     def forward(self, x, verbose=False):
@@ -71,7 +73,7 @@ class BaseUNet(pl.LightningModule):
         if verbose: print('head', x.shape)
         return x
 
-    def get_features(self, in_channels, n_features):
+    def get_features(self, in_channels:int, n_features:int) -> OrderedDict:
         n_features_down = [n_features * 2**i for i in range(0,4)]
         # in_channels is multiplied by 2 because encoder outputs are concatenated as well (see forward method)
         n_features_up = [(2*n, max(1,n//2)) for n in reversed(n_features_down)]
@@ -86,20 +88,26 @@ class BaseUNet(pl.LightningModule):
 
         return OrderedDict(features_down + feats_bottleneck + features_up)
         
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch:Union[torch.Tensor, Iterable[torch.Tensor]], batch_idx:int) -> torch.Tensor:
         x, targs = batch
         preds = self(x)
         loss = self.crit(preds, targs)
         self.log('train_loss', loss)
         return loss
+    
+    def validation_step(self, batch:Union[torch.Tensor, Iterable[torch.Tensor]], batch_idx:int):
+        x, targs = batch
+        preds = self(x)
+        loss = self.crit(preds, targs)
+        self.log('valid_loss', loss)
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
         return optimizer
 
 class InvariantHead(nn.Module):
-    def __init__(self, in_channels, out_channels, pool_type='group'):
-        super().__init__()
+    def __init__(self, in_channels:int, out_channels:int, *args, pool_type:str='group', **kwargs):
+        super().__init__(*args, **kwargs)
 
         if pool_type == 'group':
             self.pool = GroupPooling(in_channels)
@@ -114,7 +122,7 @@ class InvariantHead(nn.Module):
             f'final-act': nn.Sigmoid()
         }))
     
-    def forward(self, x, verbose=False):
+    def forward(self, x:GeometricTensor, verbose:bool=False) -> torch.Tensor:
         x = self.pool(x)
         x = x.tensor
         if verbose: print('pool', x.shape)
@@ -124,20 +132,20 @@ class InvariantHead(nn.Module):
 
 class BaseEquivUNet(BaseUNet):
 
-    def __init__(self, gspace, in_channels, out_channels, *args, **kwargs):
+    def __init__(self, gspace:e2cnn.gspaces, in_channels:int, out_channels:int, *args, **kwargs):
         self.gspace = gspace
         super().__init__(in_channels, out_channels, *args, **kwargs)
 
-    def get_head(self, out_channels):
+    def get_head(self, out_channels:int) -> InvariantHead:
         return InvariantHead(self.features['decoder4'][1], out_channels)
 
     @staticmethod
-    def cat(gtensors, *args, **kwargs):
+    def cat(gtensors:Iterable[GeometricTensor], *args, **kwargs) -> GeometricTensor:
         tensors = [ t.tensor for t in gtensors]
         tensors_cat = torch.cat(tensors, *args, **kwargs)
         feature_type = sum([t.type for t in gtensors[1:]], start=gtensors[0].type)
         return GeometricTensor(tensors_cat, feature_type)
 
-    def forward(self, x, verbose=False):
+    def forward(self, x:torch.Tensor, verbose:bool=False) -> torch.Tensor:
         x = GeometricTensor(x, self.features['encoder1'][0])
         return super().forward(x)

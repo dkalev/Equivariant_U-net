@@ -21,15 +21,17 @@ def get_model(config):
         raise ValueError(f'Unsupported model type: {config.model}')
 
 def train(config):
-    ds = RetinalDataset(config.image_dir, config.label_dir)
-    train_loader = DataLoader(ds, batch_size=config.bs, shuffle=True, num_workers=12, pin_memory=True)
+    train_ds = RetinalDataset(config.image_dir_train, config.label_dir_train)
+    valid_ds = RetinalDataset(config.image_dir_valid, config.label_dir_valid)
+    train_loader = DataLoader(train_ds, batch_size=config.bs, shuffle=True, num_workers=12, pin_memory=True)
+    valid_loader = DataLoader(valid_ds, batch_size=config.bs, num_workers=12, pin_memory=True)
 
     model = get_model(config)
-    checkpoint_cb = ModelCheckpoint(monitor='train_loss')
-    trainer = pl.Trainer(gpus=1, max_epochs=config.n_epochs, callbacks=[checkpoint_cb])
+    checkpoint_cb = ModelCheckpoint(monitor='valid_loss')
+    trainer = pl.Trainer(auto_lr_find=True, gpus=1, max_epochs=config.n_epochs, callbacks=[checkpoint_cb])
     # trainer = pl.Trainer(auto_lr_find=True, gpus=1, callbacks=[checkpoint_cb])
-    # trainer.tune(model, train_loader)
-    trainer.fit(model, train_loader)
+    trainer.tune(model, train_loader, valid_loader)
+    trainer.fit(model, train_loader, valid_loader)
 
 def grid_search(config):
     ds = RetinalDataset(config.image_dir, config.label_dir)
@@ -55,8 +57,10 @@ if __name__ == '__main__':
     parser.add_argument('--n_epochs', type=int, default=10, help='Max number of epochs')
     parser.add_argument('--in_channels', type=int, default=3, help='Number of input channels')
     parser.add_argument('--out_channels', type=int, default=1, help='Number of output channels')
-    parser.add_argument('--image_dir', type=str, default='training/images', help='Path to training dataset')
-    parser.add_argument('--label_dir', type=str, default='training/1st_manual', help='Path to training dataset manually segmented masks')
+    parser.add_argument('--image_dir_train', type=str, default='data/training/images', help='Path to training dataset')
+    parser.add_argument('--label_dir_train', type=str, default='data/training/1st_manual', help='Path to training dataset manually segmented masks')
+    parser.add_argument('--image_dir_valid', type=str, default='data/valid/images', help='Path to valid dataset')
+    parser.add_argument('--label_dir_valid', type=str, default='data/valid/1st_manual', help='Path to valid dataset manually segmented masks')
     parser.add_argument('--output_dir', type=str, default='.', help='Output directory path to save results')
 
     config = parser.parse_args()
