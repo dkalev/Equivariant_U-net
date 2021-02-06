@@ -2,6 +2,7 @@ from torch.utils.data import Dataset, DataLoader
 from pytorch_lightning import LightningDataModule
 import os
 import zipfile
+import shutil
 from PIL import Image
 from pathlib import Path
 import torch
@@ -44,6 +45,10 @@ class RetinalDataModule(LightningDataModule):
         super().__init__()
 
     def prepare_data(self, datapath='data/datasets.zip', output_dir='data'):
+        folders_exist = [ Path(output_dir, subdir).is_dir() for subdir in ['training', 'valid', 'test'] ]
+        if all(folders_exist): return
+        elif any(folders_exist): shutil.rmtree(output_dir)
+
         with zipfile.ZipFile(datapath, 'r') as zip_ref:
             zip_ref.extractall(output_dir)
 
@@ -76,10 +81,10 @@ class RetinalDataModule(LightningDataModule):
             }
         }
 
-    def train_dataloader(self):
+    def train_dataloader(self, batch_size=1):
         train_split = RetinalDataset(self.paths['train']['images'], self.paths['train']['labels'])
-        return DataLoader(train_split)
+        return DataLoader(train_split, shuffle=True, batch_size=batch_size, num_workers=4)
 
-    def val_dataloader(self):
+    def val_dataloader(self, batch_size=1):
         valid_split = RetinalDataset(self.paths['valid']['images'], self.paths['valid']['labels'])
-        return DataLoader(valid_split)
+        return DataLoader(valid_split, batch_size=batch_size, num_workers=4)
