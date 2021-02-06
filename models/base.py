@@ -3,6 +3,7 @@ import torch.nn as nn
 from collections import OrderedDict
 from e2cnn.nn import GeometricTensor, GroupPooling, NormPool
 import e2cnn
+from abc import abstractmethod
 import pytorch_lightning as pl
 from loss import DiceLoss
 from typing import Iterable, Union
@@ -12,6 +13,8 @@ class BaseUNet(pl.LightningModule):
     def __init__(self, in_channels:int, out_channels:int, *args, n_features:int=64, **kwargs):
         super().__init__(*args, **kwargs)
         self.crit = DiceLoss()
+        self.accuracy = pl.metrics.Accuracy()
+        self.f1 = pl.metrics.F1()
         self.lr = 1e-3
 
         self.features = self.get_features(in_channels, n_features)
@@ -30,21 +33,43 @@ class BaseUNet(pl.LightningModule):
 
         self.head = self.get_head(out_channels)
 
+    def training_step(self, batch:Union[torch.Tensor, Iterable[torch.Tensor]], batch_idx:int) -> torch.Tensor:
+        x, targs = batch
+        preds = self(x)
+        loss = self.crit(preds, targs)
+        self.log_metrics(preds, targs, loss)
+        return loss
+    
+    def validation_step(self, batch:Union[torch.Tensor, Iterable[torch.Tensor]], batch_idx:int):
+        x, targs = batch
+        preds = self(x)
+        loss = self.crit(preds, targs)
+        self.log_metrics(preds, targs, loss, split='valid')
+    
+    def log_metrics(self, preds, targs, loss, split='train'):
+        self.log(f'{split}_loss', loss)
+        self.log(f'{split}_acc', self.accuracy(preds, targs))
+        self.log(f'{split}_f1', self.f1(preds, targs))
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
+        return optimizer
+
     @staticmethod 
     def cat(tensors:Iterable[torch.Tensor], *args, **kwargs) -> torch.Tensor:
         return torch.cat(tensors, *args, **kwargs)
 
-    def get_head(self, out_channels:int):
-        raise NotImplementedError("Implement this method")
+    @abstractmethod
+    def get_head(self, out_channels:int): pass
 
-    def get_encoder(self, name:str):
-        raise NotImplementedError("Implement this method")
+    @abstractmethod
+    def get_encoder(self, name:str): pass
 
-    def get_bottleneck(self, name:str='bottleneck'):
-        raise NotImplementedError("Implement this method")
-
-    def get_decoder(self, name:str):
-        raise NotImplementedError("Implement this method")
+    @abstractmethod
+    def get_bottleneck(self, name:str='bottleneck'): pass
+    
+    @abstractmethod
+    def get_decoder(self, name:str): pass
 
     def forward(self, x, verbose=False):
         if verbose: print('input', x.shape)
@@ -88,22 +113,6 @@ class BaseUNet(pl.LightningModule):
 
         return OrderedDict(features_down + feats_bottleneck + features_up)
         
-    def training_step(self, batch:Union[torch.Tensor, Iterable[torch.Tensor]], batch_idx:int) -> torch.Tensor:
-        x, targs = batch
-        preds = self(x)
-        loss = self.crit(preds, targs)
-        self.log('train_loss', loss)
-        return loss
-    
-    def validation_step(self, batch:Union[torch.Tensor, Iterable[torch.Tensor]], batch_idx:int):
-        x, targs = batch
-        preds = self(x)
-        loss = self.crit(preds, targs)
-        self.log('valid_loss', loss)
-
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
-        return optimizer
 
 class InvariantHead(nn.Module):
     def __init__(self, in_channels:int, out_channels:int, *args, pool_type:str='group', **kwargs):
