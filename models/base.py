@@ -10,12 +10,12 @@ from typing import Iterable, Union
 
 class BaseUNet(pl.LightningModule):
 
-    def __init__(self, in_channels:int, out_channels:int, *args, n_features:int=64, **kwargs):
+    def __init__(self, in_channels:int, out_channels:int, *args, n_features:int=64, lr:float=1e-3, **kwargs):
         super().__init__(*args, **kwargs)
         self.crit = DiceLoss()
         self.accuracy = pl.metrics.Accuracy()
         self.f1 = pl.metrics.F1()
-        self.lr = 1e-3
+        self.lr = lr
 
         self.features = self.get_features(in_channels, n_features)
 

@@ -1,55 +1,47 @@
-from dataset import RetinalDataset
 from models import C4UNet, UNet, HarmonicUNet
-from torch.utils.data import DataLoader
 from e2cnn import gspaces
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.loggers import TensorBoardLogger
 from test_tube import Experiment, HyperOptArgumentParser
-from data.data_module import RetinalDataModule
+from dataset import RetinalDataModule
+from torch.nn import BCEWithLogitsLoss
 
 def get_model(config):
     if config.model == 'discrete':
         r2_act = gspaces.Rot2dOnR2(8)
-        model = C4UNet(r2_act, config.in_channels, config.out_channels, n_features=config.n_features)
-        model.lr = config.learning_rate
-        return model
+        return C4UNet(r2_act, config.in_channels, config.out_channels, n_features=config.n_features, lr=config.lr)
     elif config.model == 'standard':
-        model = UNet(config.in_channels, config.out_channels, n_features=config.n_features)
-        model.lr = config.learning_rate
-        return model
+        return UNet(config.in_channels, config.out_channels, n_features=config.n_features, lr=config.lr)
     elif config.model == 'harmonic':
-        r2_act = gspaces.Rot2dOnR2(-1, maximum_frequency=2)
-        model = HarmonicUNet(r2_act, config.in_channels, config.out_channels, n_features=config.n_features)
-        model.lr = config.learning_rate
-        return model
+        r2_act = gspaces.Rot2dOnR2(-1, maximum_frequency=1)
+        return HarmonicUNet(r2_act, config.in_channels, config.out_channels, n_features=config.n_features, lr=config.lr)
     else:
         raise ValueError(f'Unsupported model type: {config.model}')
 
+def get_exp_name(config):
+    return f'{config.model}_{config.n_features}_{config.lr}_{config.batch_size}' 
+
 def train(config):
-    # train_ds = RetinalDataset(config.image_dir_train, config.label_dir_train)
-    # valid_ds = RetinalDataset(config.image_dir_valid, config.label_dir_valid)
-    # train_loader = DataLoader(train_ds, batch_size=config.bs, shuffle=True, num_workers=10, pin_memory=True)
-    # valid_loader = DataLoader(valid_ds, batch_size=config.bs, num_workers=10, pin_memory=True)
     rdm = RetinalDataModule()
 
     model = get_model(config)
+    model.crit = BCEWithLogitsLoss()
     checkpoint_cb = ModelCheckpoint(monitor='valid_loss')
-    trainer = pl.Trainer(gpus=1, max_epochs=config.n_epochs, callbacks=[checkpoint_cb])
-    # trainer = pl.Trainer(auto_lr_find=True, gpus=1, callbacks=[checkpoint_cb])
-    # trainer.tune(model, train_loader, valid_loader)
-    # trainer.fit(model, train_loader, valid_loader)
+    logger = TensorBoardLogger('logs', name=get_exp_name(config))
+    trainer = pl.Trainer(gpus=1, max_epochs=config.n_epochs, logger=logger, callbacks=[checkpoint_cb])
     trainer.fit(model, rdm)
 
 def grid_search(config):
-    train_ds = RetinalDataset(config.image_dir_train, config.label_dir_train)
-    valid_ds = RetinalDataset(config.image_dir_valid, config.label_dir_valid)
+    rdm = RetinalDataModule()
+    rdm.prepare_data()
+    rdm.setup()
 
-    exp = Experiment(name=f'{config.model}-{config.n_features}-{config.bs}-{config.learning_rate}',
-                    debug=False, save_dir='test_tube')
+    exp = Experiment(name=get_exp_name(config), debug=False, save_dir='test_tube')
     for hparam in config.trials(10):
         model = get_model(hparam)
-        train_loader = DataLoader(train_ds, batch_size=config.bs, shuffle=True, num_workers=1, pin_memory=True)
-        valid_loader = DataLoader(valid_ds, batch_size=config.bs, num_workers=1, pin_memory=True)
+        train_loader = rdm.train_dataloader(batch_size=config.batch_size)
+        valid_loader = rdm.val_dataloader(batch_size=config.batch_size)
         trainer = pl.Trainer(gpus=1, max_epochs=10)
         trainer.fit(model, train_loader, valid_loader)
         exp.log(trainer.logged_metrics)
@@ -60,9 +52,9 @@ if __name__ == '__main__':
     parser = HyperOptArgumentParser(description="Train a U-Net model", strategy='grid_search')
     parser.add_argument('--grid_search', default=False, help='Grid search')
     parser.add_argument('--model', type=str, default='discrete', help='Model type. One of [discrete, standard, harmonic]')
-    parser.opt_range('--learning_rate', default=1e-3, type=float, low=1e-6, high=1e-1, nb_samples=10, tunable=True)
-    parser.opt_list('--n_features', default=32, type=int, tunable=True, options=[2, 8, 16])
-    parser.opt_list('--bs', type=int, default=4, options=[4, 8, 16, 32], help='Batch size')
+    parser.opt_range('--lr', default=1e-3, type=float, low=1e-6, high=1e-1, nb_samples=10, tunable=True)
+    parser.opt_list('--n_features', default=32, type=int, tunable=True, options=[8, 16, 32, 64])
+    parser.opt_list('--batch_size', type=int, default=4, options=[4, 8, 16], help='Batch size')
     parser.add_argument('--n_epochs', type=int, default=10, help='Max number of epochs')
     parser.add_argument('--in_channels', type=int, default=3, help='Number of input channels')
     parser.add_argument('--out_channels', type=int, default=1, help='Number of output channels')

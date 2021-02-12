@@ -83,8 +83,8 @@ class RetinalDataModule(LightningDataModule):
 
     def train_dataloader(self, batch_size=1):
         train_split = RetinalDataset(self.paths['train']['images'], self.paths['train']['labels'])
-        return DataLoader(train_split, shuffle=True, batch_size=batch_size, num_workers=4)
+        return DataLoader(train_split, shuffle=True, batch_size=batch_size, num_workers=12)
 
     def val_dataloader(self, batch_size=1):
         valid_split = RetinalDataset(self.paths['valid']['images'], self.paths['valid']['labels'])
-        return DataLoader(valid_split, batch_size=batch_size, num_workers=4)
+        return DataLoader(valid_split, batch_size=batch_size)
