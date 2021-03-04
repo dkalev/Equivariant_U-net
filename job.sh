@@ -1,9 +1,10 @@
 #!/bin/bash
-#SBATCH --job-name="DRIVE_EquivUNet"
+#SBATCH --job-name="DRIVE"
 #SBATCH --nodes=1 # Number of nodes
-#SBATCH --time=02:00:00 # excepted wall clock time
+#SBATCH --time=04:00:00 # excepted wall clock time
 #SBATCH --partition=gpu_shared # specify partition
 #SBATCH --signal=SIGUSR1@90 #enables pl to save a checkpoint if the job is to be terminated
+#SBATCH --output=out/%x.%j.out
 
 module load 2020
 module load Anaconda3/2020.02
@@ -15,7 +16,9 @@ cp -r $HOME/DRIVE "$TMPDIR" # copy data to scratch
 
 cd "$TMPDIR"/DRIVE
 
-srun python -u train.py
+echo "Start training model $1"
+srun python -u train.py --model=$1
 
-cp -r lightning_logs/* $HOME/DRIVE/lightning_logs
+cp -r logs/* $HOME/DRIVE/logs
+cp -r test_tube/* $HOME/DRIVE/test_tube
 echo DONE

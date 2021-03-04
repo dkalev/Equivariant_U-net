@@ -6,7 +6,7 @@ training/*
 test/*
 datasets.zip
 **/*.pth
-**/slurm*.out
+out/**/*.out
 lightning_logs/*
 logs/*
 test_tube/*
