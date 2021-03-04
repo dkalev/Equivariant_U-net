@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+from torch.optim import Adam
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from collections import OrderedDict
 from e2cnn.nn import GeometricTensor, GroupPooling, NormPool
 import e2cnn
@@ -52,8 +54,12 @@ class BaseUNet(pl.LightningModule):
         self.log(f'{split}_f1', self.f1(preds, targs))
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
-        return optimizer
+        optimizer = Adam(self.parameters(), lr=self.lr, weight_decay=1e-5)
+        return {
+            'optimizer': optimizer,
+            'scheduler': ReduceLROnPlateau(optimizer, 'min'),
+            'monitor': 'valid_loss'
+        }
 
     @staticmethod 
     def cat(tensors:Iterable[torch.Tensor], *args, **kwargs) -> torch.Tensor:
@@ -98,7 +104,8 @@ class BaseUNet(pl.LightningModule):
         if verbose: print('head', x.shape)
         return x
 
-    def get_features(self, in_channels:int, n_features:int) -> OrderedDict:
+    @staticmethod
+    def get_features(in_channels:int, n_features:int) -> OrderedDict:
         n_features_down = [n_features * 2**i for i in range(0,4)]
         # in_channels is multiplied by 2 because encoder outputs are concatenated as well (see forward method)
         n_features_up = [(2*n, max(1,n//2)) for n in reversed(n_features_down)]
