@@ -13,10 +13,10 @@ class UNet(BaseUNet):
     def get_encoder(self, name):
         in_channels, out_channels = self.features[name]
         return nn.Sequential(OrderedDict({
-            f'{name}-conv1': nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1, bias=False),
-            f'{name}-bn1': nn.BatchNorm2d(out_channels),
+            f'{name}-conv1': nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=2, padding=1, bias=False),
+            f'{name}-bn1': nn.BatchNorm2d(in_channels),
             f'{name}-relu1': nn.ReLU(inplace=True),
-            f'{name}-conv2': nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=False),
+            f'{name}-conv2': nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False),
             f'{name}-bn2': nn.BatchNorm2d(out_channels),
             f'{name}-relu2': nn.ReLU(inplace=True),
         }))
