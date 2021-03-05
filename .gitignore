@@ -1,5 +1,5 @@
 **/__pycache__/*
-.ipynb_checkpoints/*
+**/.ipynb_checkpoints/*
 .vscode/*
 data/*
 training/*
@@ -9,5 +9,5 @@ datasets.zip
 out/**/*.out
 lightning_logs/*
 logs/*
-test_tube/*
+ray_tune/*
 **/*.ckpt
