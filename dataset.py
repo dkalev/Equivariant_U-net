@@ -44,7 +44,7 @@ class RetinalDataModule(LightningDataModule):
     def __init__(self):
         super().__init__()
 
-    def prepare_data(self, datapath='data/datasets.zip', output_dir='data'):
+    def prepare_data(self, datapath='/home/dkalev/DRIVE/data/datasets.zip', output_dir='/home/dkalev/DRIVE/data'):
         folders_exist = [ Path(output_dir, subdir).is_dir() for subdir in ['training', 'valid', 'test'] ]
         if all(folders_exist): return
         elif any(folders_exist): shutil.rmtree(output_dir)
@@ -72,12 +72,12 @@ class RetinalDataModule(LightningDataModule):
     def setup(self, stage: Optional[str] = None):
         self.paths = {
             'train': {
-                'images': 'data/training/images',
-                'labels': 'data/training/1st_manual',
+                'images': '/home/dkalev/DRIVE/data/training/images',
+                'labels': '/home/dkalev/DRIVE/data/training/1st_manual',
             },
             'valid': {
-                'images': 'data/valid/images',
-                'labels': 'data/valid/1st_manual',
+                'images': '/home/dkalev/DRIVE/data/valid/images',
+                'labels': '/home/dkalev/DRIVE/data/valid/1st_manual',
             }
         }
 
