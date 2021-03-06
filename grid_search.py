@@ -3,19 +3,20 @@ import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger
 from ray import tune
 from ray.tune import CLIReporter
-from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining
+from ray.tune.schedulers import ASHAScheduler
 from ray.tune.integration.pytorch_lightning import TuneReportCallback
 from dataset import RetinalDataModule
 from pathlib import Path
+from parse_hyperparams import parse_hparams
 
 from train import get_model
 
-def train_tune(config, rdm):
+def train_tune(hparams, rdm):
 
-    model = get_model(config)
+    model = get_model(hparams)
 
     logger = TensorBoardLogger(save_dir=tune.get_trial_dir(), name="", version=".", default_hp_metric=False)
-    logger.log_hyperparams(config, {
+    logger.log_hyperparams(hparams, {
         'train_acc': 0,
         'train_f1': 0,
         'train_loss': 0,
@@ -25,7 +26,7 @@ def train_tune(config, rdm):
     })
 
     trainer = pl.Trainer(
-        max_epochs=config['n_epochs'],
+        max_epochs=hparams['n_epochs'],
         gpus=1,
         logger=logger,
         progress_bar_refresh_rate=0,
@@ -36,14 +37,14 @@ def train_tune(config, rdm):
         ])
     trainer.fit(model, rdm)
 
-def grid_search(config):
+def grid_search(hparams):
     scheduler = ASHAScheduler(
-        max_t=config['n_epochs'],
+        max_t=hparams['n_epochs'],
         grace_period=1,
         reduction_factor=2)
     
     reporter = CLIReporter(
-        parameter_columns=config['param_cols'],
+        parameter_columns=hparams['param_cols'],
         metric_columns=['valid_acc', 'valid_f1', 'valid_loss'])
 
     rdm = RetinalDataModule()
@@ -53,43 +54,35 @@ def grid_search(config):
         resources_per_trial={ "cpu": 1, "gpu":1 },
         metric="valid_loss",
         mode="min",
-        config=config,
-        local_dir=Path(config['output_dir'], 'ray_tune'),
+        config=hparams,
+        local_dir=Path(hparams['output_dir'], 'ray_tune'),
         num_samples=5,
         scheduler=scheduler,
         progress_reporter=reporter,
-        name=f"tune_{config['model']}_DRIVE")
+        name=f"tune_{hparams['model']}_DRIVE")
 
     print("Best hyperparameters found were: ", analysis.best_config)
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Train a U-Net model")
-    parser.add_argument('--model', type=str, default='steerable', help='Model type. One of [discrete, standard, harmonic, steerable]')
-    parser.add_argument('--n_epochs', type=int, default=10, help='Max number of epochs')
-    parser.add_argument('--in_channels', type=int, default=3, help='Number of input channels')
-    parser.add_argument('--out_channels', type=int, default=1, help='Number of output channels')
-    parser.add_argument('--output_dir', type=str, default='.', help='Output directory path to save results')
+    parser = argparse.ArgumentParser(description="Grid search for a U-Net model")
+    hparams = parse_hparams(parser)
+    # hparams['lr'] = tune.loguniform(1e-5, 1e-1)
+    hparams['lr'] = 1e-3
+    hparams['n_features'] = tune.grid_search([2, 8, 16, 32])
+    # hparams['batch_size'] = tune.choice([2, 4, 8])
+    hparams['batch_size'] = 4
 
-    config = parser.parse_args()
-    config = vars(config)
-
-    # config['lr'] = tune.loguniform(1e-5, 1e-1)
-    config['lr'] = 1e-3
-    config['n_features'] = tune.choice([2, 8, 16, 32])
-    # config['batch_size'] = tune.choice([2, 4, 8])
-    config['batch_size'] = 4
-
-    if config['model'] == 'steerable':
-        config['irrep_type'] = tune.grid_search(['all', 'even', 'odd'])
-        config['n_blocks'] = tune.grid_search([2, 4, 8, 16])
-        config['max_freq'] = tune.grid_search([2, 4, 8, 16])
-    elif config['model'] == 'discrete':
-        config['N'] = tune.grid_search([2,4,8,16])
-        config['group'] = tune.grid_search(['circle', 'dihedral'])
+    if hparams['model'] == 'steerable':
+        hparams['irrep_type'] = tune.grid_search(['all', 'even', 'odd'])
+        hparams['n_blocks'] = tune.grid_search([2, 4, 8, 16])
+        hparams['max_freq'] = tune.grid_search([2, 4, 8, 16])
+    elif hparams['model'] == 'discrete':
+        hparams['N'] = tune.grid_search([2,4,8,16])
+        hparams['group'] = tune.grid_search(['circle', 'dihedral'])
 
     param_cols = ["lr", "batch_size", "irrep_type", "n_features", "n_blocks", "max_freq", "N", "group"]
-    param_cols = list(set(param_cols).intersection(config.keys()))
-    config['param_cols'] = param_cols
+    param_cols = list(set(param_cols).intersection(hparams.keys()))
+    hparams['param_cols'] = param_cols
 
-    grid_search(config)
+    grid_search(hparams)
