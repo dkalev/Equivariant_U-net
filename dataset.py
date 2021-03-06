@@ -87,4 +87,4 @@ class RetinalDataModule(LightningDataModule):
 
     def val_dataloader(self, batch_size=1):
         valid_split = RetinalDataset(self.paths['valid']['images'], self.paths['valid']['labels'])
-        return DataLoader(valid_split, batch_size=batch_size)
+        return DataLoader(valid_split, batch_size=batch_size, num_workers=12)

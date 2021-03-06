@@ -3,15 +3,16 @@ import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 from loss import DiceLoss
+from argparse import ArgumentParser
 
 from e2cnn.group import directsum
 from e2cnn.nn import GeometricTensor, FieldType, R2Conv, GNormBatchNorm, NormNonLinearity, NormPool
 
 class SteerableCNN(pl.LightningModule):
-    def __init__(self, gspace, in_channels, out_channels, n_blocks=4, n_features=20, irrep_type='all', lr=1e-3):
+    def __init__(self, gspace, in_channels, out_channels, n_blocks=4, n_features=20, loss_type='dice', irrep_type='all', lr=1e-3):
         super().__init__()
         self.gspace = gspace
-        self.crit = DiceLoss()
+        self.crit = self.get_crit(loss_type)
         self.accuracy = pl.metrics.Accuracy()
         self.f1 = pl.metrics.F1()
         self.lr = lr
@@ -32,6 +33,23 @@ class SteerableCNN(pl.LightningModule):
         self.model.add_module('norm-pool', norm_pool)
         
         self.head = nn.Conv2d(norm_pool.out_type.size, out_channels, kernel_size=3, padding=1)
+        
+    @staticmethod
+    def get_crit(loss_type):
+        if loss_type == 'dice':
+            return DiceLoss()
+        elif loss_type == 'bce':
+            return nn.BCEWithLogitsLoss()
+        else:
+            raise ValueError(f'Unsupported loss: {loss_type}. Choose one of [dice, bce].')
+        
+    @staticmethod
+    def add_model_specific_args(parent_parser):
+        parser = ArgumentParser(parents=[parent_parser], add_help=False)
+        parser.add_argument('--n_blocks', type=int, default=10, help='Number of conv blocks for steerable model')
+        parser.add_argument('--max_freq',  type=int, default=2,help='Max frequency for steerable model')
+        parser.add_argument('--irrep_type', type=str, default='all', help='Steerable model irrep type. One of [all, even, odd]')
+        return parser
         
     def forward(self, x):
         x = GeometricTensor(x, self.in_type)

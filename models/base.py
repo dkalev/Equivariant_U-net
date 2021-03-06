@@ -12,9 +12,9 @@ from typing import Iterable, Union
 
 class BaseUNet(pl.LightningModule):
 
-    def __init__(self, in_channels:int, out_channels:int, *args, n_features:int=64, lr:float=1e-3, **kwargs):
+    def __init__(self, in_channels:int, out_channels:int, *args, n_features:int=64, loss_type='dice', lr:float=1e-3, **kwargs):
         super().__init__(*args, **kwargs)
-        self.crit = DiceLoss()
+        self.crit = self.get_crit(loss_type)
         self.accuracy = pl.metrics.Accuracy()
         self.f1 = pl.metrics.F1()
         self.lr = lr
@@ -34,6 +34,15 @@ class BaseUNet(pl.LightningModule):
         self.decoder4 = self.get_decoder('decoder4')
 
         self.head = self.get_head(out_channels)
+    
+    @staticmethod
+    def get_crit(loss_type):
+        if loss_type == 'dice':
+            return DiceLoss()
+        elif loss_type == 'bce':
+            return nn.BCEWithLogitsLoss()
+        else:
+            raise ValueError(f'Unsupported loss: {loss_type}. Choose one of [dice, bce].')
 
     def training_step(self, batch:Union[torch.Tensor, Iterable[torch.Tensor]], batch_idx:int) -> torch.Tensor:
         x, targs = batch
@@ -41,7 +50,7 @@ class BaseUNet(pl.LightningModule):
         loss = self.crit(preds, targs)
         self.log_metrics(preds, targs, loss)
         return loss
-    
+   
     def validation_step(self, batch:Union[torch.Tensor, Iterable[torch.Tensor]], batch_idx:int):
         x, targs = batch
         preds = self(x)
@@ -89,7 +98,7 @@ class BaseUNet(pl.LightningModule):
         if verbose: print('enc4', enc4.shape)
 
         x = self.bottleneck(enc4)
-        if verbose: print('botleneck', x.shape)
+        if verbose: print('bottleneck', x.shape)
 
         x = self.decoder1(self.cat([x, enc4], dim=1))
         if verbose: print('dec1', x.shape)
@@ -148,9 +157,13 @@ class InvariantHead(nn.Module):
 
 class BaseEquivUNet(BaseUNet):
 
-    def __init__(self, gspace:e2cnn.gspaces, in_channels:int, out_channels:int, *args, **kwargs):
-        self.gspace = gspace
+    def __init__(self, in_channels:int, out_channels:int, *args, **kwargs):
+        self.gspace = self.get_gspace(kwargs)
         super().__init__(in_channels, out_channels, *args, **kwargs)
+    
+    @staticmethod
+    @abstractmethod
+    def get_gspace(kwargs): pass
 
     def get_head(self, out_channels:int) -> InvariantHead:
         return InvariantHead(self.features['decoder4'][1], out_channels)
