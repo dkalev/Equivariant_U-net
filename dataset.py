@@ -41,8 +41,9 @@ class RetinalDataset(Dataset):
 
 class RetinalDataModule(LightningDataModule):
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *args, batch_size=1, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.batch_size = batch_size
 
     def prepare_data(self, datapath='/home/dkalev/DRIVE/data/datasets.zip', output_dir='/home/dkalev/DRIVE/data'):
         folders_exist = [ Path(output_dir, subdir).is_dir() for subdir in ['training', 'valid', 'test'] ]
@@ -81,10 +82,12 @@ class RetinalDataModule(LightningDataModule):
             }
         }
 
-    def train_dataloader(self, batch_size=1):
+    def train_dataloader(self, batch_size=None):
+        if batch_size is None: batch_size = self.batch_size
         train_split = RetinalDataset(self.paths['train']['images'], self.paths['train']['labels'])
         return DataLoader(train_split, shuffle=True, batch_size=batch_size, num_workers=12)
 
-    def val_dataloader(self, batch_size=1):
+    def val_dataloader(self, batch_size=None):
+        if batch_size is None: batch_size = self.batch_size
         valid_split = RetinalDataset(self.paths['valid']['images'], self.paths['valid']['labels'])
         return DataLoader(valid_split, batch_size=batch_size, num_workers=12)
